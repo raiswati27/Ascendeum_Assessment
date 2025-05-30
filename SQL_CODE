@@ -1,0 +1,60 @@
+WITH parsed_sessions AS (
+  SELECT
+    resource_id,
+    date,
+    
+    -- Parse start_time
+    printf(
+      '%04d-%02d-%02d %s:00',
+      substr(start_time, instr(start_time, ' ') + 1 + 6, 4),           -- year
+      substr('00' || substr(start_time, 0, instr(start_time, '/')), -2), -- month
+      substr('00' || substr(start_time, instr(start_time, '/') + 1, instr(start_time, ' ') - instr(start_time, '/') - 1), -2), -- day
+      substr(start_time, instr(start_time, ' ') + 1)                     -- time
+    ) AS parsed_start_time,
+
+    -- Parse end_time similarly
+    printf(
+      '%04d-%02d-%02d %s:00',
+      substr(end_time, instr(end_time, ' ') + 1 + 6, 4),           
+      substr('00' || substr(end_time, 0, instr(end_time, '/')), -2), 
+      substr('00' || substr(end_time, instr(end_time, '/') + 1, instr(end_time, ' ') - instr(end_time, '/') - 1), -2), 
+      substr(end_time, instr(end_time, ' ') + 1)                     
+    ) AS parsed_end_time
+
+  FROM test_de4in
+),
+session_durations AS (
+  SELECT 
+    resource_id,
+    date(date) AS session_date,
+    strftime('%W', date) AS week_number,
+    (julianday(parsed_end_time) - julianday(parsed_start_time)) * 24.0 AS duration_hours
+  FROM parsed_sessions
+  WHERE parsed_end_time > parsed_start_time
+),
+weekly_totals AS (
+  SELECT
+    resource_id,
+    week_number,
+    SUM(duration_hours) AS weekly_hours
+  FROM session_durations
+  GROUP BY resource_id, week_number
+),
+overall_avg_weekly_hours AS (
+  SELECT
+    resource_id,
+    SUM(weekly_hours) AS total_hours,
+    COUNT(*) AS total_weeks,
+    SUM(weekly_hours) * 1.0 / COUNT(*) AS avg_weekly_hours
+  FROM weekly_totals
+  GROUP BY resource_id
+)
+SELECT resource_id, avg_weekly_hours FROM overall_avg_weekly_hours
+ORDER BY resource_id
+;
+
+
+
+
+
+
